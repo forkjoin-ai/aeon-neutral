@@ -33,3 +33,14 @@ export {
   skyrmsC1Measure,
   skyrmsC3Adapt,
 } from './skyrms-walker';
+export {
+  VoidAttentionHead,
+  VoidCrossAttentionHead,
+  VoidTransformerBlock,
+  type VoidAttentionConfig,
+  type AttentionOutput,
+  type CrossAttentionConfig,
+  type CrossAttentionOutput,
+  type VoidTransformerConfig,
+  type TransformerRoundOutput,
+} from './void-transformer';
