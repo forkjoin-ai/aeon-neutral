@@ -13,7 +13,7 @@ aeon-neutral (bounded)   → dispute resolution, convergence certificate, guaran
 bun add @affectively/aeon-neutral
 ```
 
-Depends on [aeon-bazaar](https://github.com/affectively-ai/aeon-bazaar) for void walker primitives (`VoidBoundary`, `complementDistribution`, `c0Choose`, `c1Measure`, `c3Adapt`).
+Depends on [aeon-bazaar](https://github.com/forkjoin-ai/aeon-bazaar) for void walker primitives (`VoidBoundary`, `complementDistribution`, `c0Choose`, `c1Measure`, `c3Adapt`).
 
 ## Quick Start
 
@@ -90,7 +90,7 @@ Symmetric games (PD, Stag Hunt) converge fast -- both walkers' voids grow in the
 
 ## Formal Verification
 
-TLA+ specifications in [aeon/companion-tests/formal/](https://github.com/affectively-ai/aeon):
+TLA+ specifications in [aeon/companion-tests/formal/](https://github.com/forkjoin-ai/aeon):
 
 - **SkyrmsNadir.tla** -- two walkers, 10 invariants, settlement/exhaustion liveness
 - **SkyrmsThreeWalker.tla** -- three walkers, 7 invariants, three-way convergence liveness
@@ -103,10 +103,12 @@ bun test
 
 ## Related
 
-- [aeon-bazaar](https://github.com/affectively-ai/aeon-bazaar) -- unbounded negotiation engine (void walker primitives)
-- [Gnosis](https://github.com/affectively-ai/gnosis) -- GGL language (negotiation topologies)
-- [Aeon](https://github.com/affectively-ai/aeon) -- TLA+ specs for convergence
+- [aeon-bazaar](https://github.com/forkjoin-ai/aeon-bazaar) -- unbounded negotiation engine (void walker primitives)
+- [Gnosis](https://github.com/forkjoin-ai/gnosis) -- GGL language (negotiation topologies)
+- [Aeon](https://github.com/forkjoin-ai/aeon) -- TLA+ specs for convergence
 
 ## License
+
+Copyright Taylor William Buley. All rights reserved.
 
 MIT
