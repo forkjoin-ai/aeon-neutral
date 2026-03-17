@@ -14,6 +14,8 @@ import {
 import {
   runChesterVMaxellBazaar,
 } from '../../../aeon-bazaar/src/scenarios/chester-v-maxell';
+import { mediateWithVoidAttention } from '../void-attention-mediator';
+import { mediateThreeWalker } from '../skyrms-walker';
 import type { Gait } from '../../../gnosis/src/void.js';
 
 // Deterministic RNG
@@ -166,48 +168,70 @@ describe('METACOG: Chester v Maxell', () => {
 // Three-Way Comparison: Bazaar vs Neutral vs METACOG
 // ============================================================================
 
-describe('METACOG vs Flat Walkers: Head-to-Head', () => {
-  test('compare across 5 seeds', () => {
+describe('FOUR-WAY: Bazaar vs Three-Walker vs Void Attn vs METACOG', () => {
+  test('compare across 5 seeds', async () => {
     const seeds = [42, 123, 456, 789, 1337];
 
-    console.log('\n=== Chester v Maxell: BAZAAR vs NEUTRAL vs METACOG ===');
-    console.log('  Seed  | Bazaar              | Neutral             | METACOG');
-    console.log('  ------|---------------------|---------------------|---------------------');
+    console.log('\n=== Chester v Maxell: FOUR-WAY COMPARISON ===');
+    console.log('  Seed  | Bazaar         | Three-Walker    | Void Attn       | METACOG');
+    console.log('  ------|----------------|-----------------|-----------------|------------------');
 
-    let bazaarSettled = 0;
-    let neutralSettled = 0;
-    let metacogSettled = 0;
+    const results: {
+      seed: number;
+      bz: { settled: boolean; pay: number };
+      tw: { settled: boolean; pay: number };
+      va: { settled: boolean; pay: number };
+      mc: { settled: boolean; pay: number; dealRate: number };
+    }[] = [];
 
     for (const seed of seeds) {
       const bazaar = runChesterVMaxellBazaar(500, seededRng(seed));
-      const neutral = runChesterVMaxellNeutral(500, 0.15, seededRng(seed));
-      const metacog = runChesterVMaxellMetacog(500, 5, seededRng(seed));
+      const bzPay = bazaar.rounds.reduce((s, r) => s + r.maxellPayoff + r.chesterPayoff, 0) / (bazaar.rounds.length * 2);
 
-      if (bazaar.settled) bazaarSettled++;
-      if (neutral.settled) neutralSettled++;
-      if (metacog.settled) metacogSettled++;
+      const tw = mediateThreeWalker({
+        numChoicesA: NUM_CHOICES, numChoicesB: NUM_CHOICES, maxRounds: 500,
+        nadirThreshold: 0.15, payoff: chesterVMaxellPayoff, rng: seededRng(seed),
+      });
+      const twPay = tw.rounds.reduce((s, r) => s + r.payoffA + r.payoffB, 0) / (tw.rounds.length * 2);
 
-      const bDesc = bazaar.settled
-        ? `r${String(bazaar.settlementRound).padEnd(3)} $${(bazaar.settlementAmount! / 1000)}K`
-        : `---  ${bazaar.rounds.length}r`;
-      const nDesc = neutral.settled
-        ? `r${String(neutral.convergenceRound).padEnd(3)} ${neutral.settlementLabel}`
-        : `---  ${neutral.summary.totalRounds}r`;
-      const mDesc = metacog.settled
-        ? `r${String(metacog.convergenceRound).padEnd(3)} ${metacog.settlementLabel}`
-        : `---  ${metacog.summary.totalRounds}r`;
+      const va = await mediateWithVoidAttention({
+        numChoicesA: NUM_CHOICES, numChoicesB: NUM_CHOICES, maxRounds: 500,
+        nadirThreshold: 0.15, neighborhoodRadius: 2,
+        payoff: chesterVMaxellPayoff, rng: seededRng(seed),
+      });
+      const vaPay = va.rounds.reduce((s, r) => s + r.payoffA + r.payoffB, 0) / (va.rounds.length * 2);
+
+      const mc = runChesterVMaxellMetacog(500, 5, seededRng(seed));
+      const mcPay = (mc.summary.avgMaxellPayoff + mc.summary.avgChesterPayoff) / 2;
+
+      results.push({
+        seed,
+        bz: { settled: bazaar.settled, pay: bzPay },
+        tw: { settled: tw.settled, pay: twPay },
+        va: { settled: va.settled, pay: vaPay },
+        mc: { settled: mc.settled, pay: mcPay, dealRate: mc.summary.dealRate },
+      });
+
+      const bzD = bazaar.settled ? `SET r${bazaar.settlementRound}` : 'NO ';
+      const twD = tw.settled ? `CON r${tw.convergenceRound}` : 'EXH';
+      const vaD = va.settled ? `CON r${va.convergenceRound}` : 'EXH';
+      const mcD = mc.settled ? `SET r${mc.convergenceRound}` : 'EXH';
 
       console.log(
-        `  ${seed.toString().padEnd(5)} | ${bDesc.padEnd(19)} | ${nDesc.padEnd(19)} | ${mDesc}`
+        `  ${seed.toString().padEnd(5)} | ${bzD.padEnd(3)} pay=${bzPay.toFixed(0).padEnd(4)} | ${twD.padEnd(3)} pay=${twPay.toFixed(0).padEnd(5)} | ${vaD.padEnd(3)} pay=${vaPay.toFixed(0).padEnd(5)} | ${mcD.padEnd(3)} pay=${mcPay.toFixed(0)} deal=${(mc.summary.dealRate * 100).toFixed(0)}%`
       );
     }
 
-    console.log('  ------|---------------------|---------------------|---------------------');
+    console.log('  ------|----------------|-----------------|-----------------|------------------');
+    const avg = (arr: number[]) => arr.reduce((a, b) => a + b, 0) / arr.length;
     console.log(
-      `  Total | ${bazaarSettled}/5 settled        | ${neutralSettled}/5 converged       | ${metacogSettled}/5 converged`
+      `  Avg   | ${results.filter(r => r.bz.settled).length}/5 pay=${avg(results.map(r => r.bz.pay)).toFixed(0).padEnd(4)} | ` +
+      `${results.filter(r => r.tw.settled).length}/5 pay=${avg(results.map(r => r.tw.pay)).toFixed(0).padEnd(5)} | ` +
+      `${results.filter(r => r.va.settled).length}/5 pay=${avg(results.map(r => r.va.pay)).toFixed(0).padEnd(5)} | ` +
+      `${results.filter(r => r.mc.settled).length}/5 pay=${avg(results.map(r => r.mc.pay)).toFixed(0)} deal=${(avg(results.map(r => r.mc.dealRate)) * 100).toFixed(0)}%`
     );
 
-    expect(seeds.length).toBe(5);
+    expect(results.length).toBe(5);
   });
 });
 
