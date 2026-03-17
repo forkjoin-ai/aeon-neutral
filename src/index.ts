@@ -5,10 +5,12 @@
  * and mediates them toward the Skyrms nadir -- the basin of attraction where
  * accumulated failure information makes settlement the gradient descent direction.
  *
- * This is not the c0-c3 metacognitive approach (that's the walker itself).
- * This is the neutral third party: it reads both void boundaries, computes the
- * joint complement surface, and proposes offers that minimize inter-walker
- * distance. The walkers remain self-interested. The mediator is the void itself.
+ * Two modes:
+ * 1. Passive mediator: reads both void boundaries, computes joint complement
+ *    surface, proposes offers. The walkers remain self-interested.
+ * 2. Three-walker: the mediator IS a third metacognitive walker whose payoff
+ *    matrix is the Skyrms convergence site itself. It void walks the joint
+ *    failure surface -- its tombstones are proposals that didn't converge.
  *
  * Uses aeon-bazaar's void walker engine for complement distribution, kurtosis,
  * inverse Bule, and void boundary primitives.
@@ -17,3 +19,17 @@
 export { NeutralMediator, type MediationConfig, type MediationResult } from './mediator';
 export { JointVoidSurface, type JointState } from './joint-surface';
 export { SkyrmsNadirDetector, type NadirCertificate } from './nadir-detector';
+export {
+  mediateThreeWalker,
+  type ThreeWalkerConfig,
+  type ThreeWalkerResult,
+  type ThreeWalkerRoundResult,
+  type SkyrmsWalkerState,
+  type SkyrmsPayoffMatrix,
+  createSkyrmsWalkerState,
+  computeSkyrmsPayoff,
+  skyrmsC0Choose,
+  skyrmsC0Update,
+  skyrmsC1Measure,
+  skyrmsC3Adapt,
+} from './skyrms-walker';
