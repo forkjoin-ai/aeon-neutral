@@ -1,0 +1,22 @@
+{
+  "name": "@affectively/aeon-neutral",
+  "version": "0.1.0",
+  "description": "Neutral mediation engine -- two walkers converging at the Skyrms nadir",
+  "type": "module",
+  "main": "src/index.ts",
+  "types": "src/index.ts",
+  "scripts": {
+    "test": "bun test",
+    "typecheck": "tsc --noEmit"
+  },
+  "keywords": [
+    "mediation",
+    "negotiation",
+    "skyrms",
+    "void-walking",
+    "metacognitive",
+    "convergence"
+  ],
+  "author": "Taylor Buley <taylor@forkjoin.ai>",
+  "license": "MIT"
+}
