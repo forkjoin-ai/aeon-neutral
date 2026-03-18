@@ -1,5 +1,5 @@
 {
-  "name": "@affectively/aeon-neutral",
+  "name": "@a0n/aeon-neutral",
   "version": "0.1.0",
   "description": "Neutral mediation engine -- two walkers converging at the Skyrms nadir",
   "type": "module",

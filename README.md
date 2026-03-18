@@ -1,4 +1,4 @@
-# @affectively/aeon-neutral
+# @a0n/aeon-neutral
 
 Bounded dispute resolution via void walking. Two metacognitive walkers on a shared void surface, mediated by a third Skyrms walker that void walks the joint failure surface. Failed interactions enrich all three void boundaries, driving complement distributions toward alignment at the Skyrms nadir.
 
@@ -10,7 +10,7 @@ aeon-neutral (bounded)   → dispute resolution, convergence certificate, guaran
 ## Install
 
 ```bash
-bun add @affectively/aeon-neutral
+bun add @a0n/aeon-neutral
 ```
 
 Depends on [aeon-bazaar](https://github.com/forkjoin-ai/aeon-bazaar) for void walker primitives (`VoidBoundary`, `complementDistribution`, `c0Choose`, `c1Measure`, `c3Adapt`).
@@ -18,7 +18,7 @@ Depends on [aeon-bazaar](https://github.com/forkjoin-ai/aeon-bazaar) for void wa
 ## Quick Start
 
 ```ts
-import { mediateThreeWalker } from '@affectively/aeon-neutral';
+import { mediateThreeWalker } from '@a0n/aeon-neutral';
 
 const result = mediateThreeWalker({
   numChoicesA: 2,
