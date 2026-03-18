@@ -1,0 +1,211 @@
+name: Formal Gates
+
+on:
+  pull_request:
+    branches: [main, development]
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: formal-gates-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  formal-gates:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Detect formal artifacts
+        id: detect
+        run: |
+          set -euo pipefail
+          gg_count=$(git ls-files '*.gg' '*.mgg' | wc -l | tr -d ' ')
+          tla_count=$(git ls-files '*.tla' | wc -l | tr -d ' ')
+          cfg_count=$(git ls-files '*.cfg' | wc -l | tr -d ' ')
+          lean_count=$(git ls-files '*.lean' '*.lean4' | wc -l | tr -d ' ')
+          has_gg=false
+          has_tla=false
+          has_cfg=false
+          has_lean=false
+          has_formal=false
+          needs_lean=false
+          needs_java=false
+          has_package_json=false
+          if [ "$gg_count" -gt 0 ]; then has_gg=true; fi
+          if [ "$tla_count" -gt 0 ]; then has_tla=true; fi
+          if [ "$cfg_count" -gt 0 ]; then has_cfg=true; fi
+          if [ "$lean_count" -gt 0 ]; then has_lean=true; fi
+          if [ "$gg_count" -gt 0 ] || [ "$tla_count" -gt 0 ] || [ "$cfg_count" -gt 0 ] || [ "$lean_count" -gt 0 ]; then has_formal=true; fi
+          if [ "$gg_count" -gt 0 ] || [ "$lean_count" -gt 0 ]; then needs_lean=true; fi
+          if [ "$tla_count" -gt 0 ] || [ "$cfg_count" -gt 0 ]; then needs_java=true; fi
+          if [ -f package.json ]; then has_package_json=true; fi
+          echo "has_formal=${has_formal}" >> "$GITHUB_OUTPUT"
+          echo "has_gg=${has_gg}" >> "$GITHUB_OUTPUT"
+          echo "has_tla=${has_tla}" >> "$GITHUB_OUTPUT"
+          echo "has_cfg=${has_cfg}" >> "$GITHUB_OUTPUT"
+          echo "has_lean=${has_lean}" >> "$GITHUB_OUTPUT"
+          echo "needs_lean=${needs_lean}" >> "$GITHUB_OUTPUT"
+          echo "needs_java=${needs_java}" >> "$GITHUB_OUTPUT"
+          echo "has_package_json=${has_package_json}" >> "$GITHUB_OUTPUT"
+
+      - uses: oven-sh/setup-bun@v2
+        if: steps.detect.outputs.has_gg == 'true'
+        with:
+          bun-version: latest
+
+      - name: Install dependencies
+        if: steps.detect.outputs.has_gg == 'true' && steps.detect.outputs.has_package_json == 'true'
+        run: |
+          set -euo pipefail
+          if [ -f bun.lock ] || [ -f bun.lockb ]; then
+            bun install --frozen-lockfile
+          else
+            bun install
+          fi
+
+      - name: Install Lean toolchain
+        if: steps.detect.outputs.needs_lean == 'true'
+        run: |
+          curl -fsSL https://raw.githubusercontent.com/leanprover/elan/master/elan-init.sh | sh -s -- -y
+          echo "$HOME/.elan/bin" >> "$GITHUB_PATH"
+
+      - name: Set up Java
+        if: steps.detect.outputs.needs_java == 'true'
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Betty strict lint for GG
+        if: steps.detect.outputs.has_gg == 'true'
+        run: |
+          set -euo pipefail
+          TLA_OUT="${RUNNER_TEMP}/gnosis-artifacts/tla"
+          LEAN_OUT="${RUNNER_TEMP}/gnosis-artifacts/lean"
+          JSON_OUT="${RUNNER_TEMP}/gnosis-artifacts/json"
+          mkdir -p "${TLA_OUT}" "${LEAN_OUT}" "${JSON_OUT}"
+
+          if [ -f ./bin/gnosis.js ]; then
+            GNOSIS_CMD=(bun ./bin/gnosis.js)
+          elif [ -x ./bin/gnosis ]; then
+            GNOSIS_CMD=(./bin/gnosis)
+          elif [ -x ./node_modules/.bin/gnosis ]; then
+            GNOSIS_CMD=(./node_modules/.bin/gnosis)
+          else
+            echo "Gnosis CLI not found. Install @affectively/gnosis or provide ./bin/gnosis.js." >&2
+            exit 1
+          fi
+
+          mapfile -t GG_FILES < <(git ls-files '*.gg' '*.mgg')
+          if [ ${#GG_FILES[@]} -eq 0 ]; then
+            echo "No .gg/.mgg files found; skipping Betty strict lint."
+            exit 0
+          fi
+
+          for file in "${GG_FILES[@]}"; do
+            echo "Betty strict lint: ${file}"
+            result=$("${GNOSIS_CMD[@]}" build "$file" --target bun --max-buley 0 --tla-out "${TLA_OUT}" --lean-out "${LEAN_OUT}" --json)
+            safe_name="${file//\//__}"
+            echo "$result" > "${JSON_OUT}/${safe_name}.json"
+            "${GNOSIS_CMD[@]}" build "$file" --target bun --max-buley 0 --tla-out "${TLA_OUT}" --lean-out "${LEAN_OUT}" --sarif > "${JSON_OUT}/${safe_name}.sarif"
+            echo "$result" | node -e '
+              const fs = require("fs");
+              const data = JSON.parse(fs.readFileSync(0, "utf8"));
+              const diag = (data.compiler?.diagnostics ?? []);
+              const cap = (data.capabilities?.issues ?? []);
+              const leanCheck = data.lean?.check ?? null;
+              const hasDiag = diag.length > 0;
+              const hasCap = cap.length > 0;
+              const leanOk = leanCheck && leanCheck.attempted === true && leanCheck.ok === true;
+              const ok = data.ok === true && data.correctness?.violationCount === 0 && !hasDiag && !hasCap && leanOk;
+              if (!ok) {
+                console.error(JSON.stringify({ file: data.filePath, ok: data.ok, diagnostics: diag, capabilityIssues: cap, correctness: data.correctness, lean: data.lean }, null, 2));
+                process.exit(1);
+              }
+            '
+          done
+
+      - name: Upload Gnosis artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: gnosis-artifacts
+          path: ${{ runner.temp }}/gnosis-artifacts
+
+      - name: TLC check all TLA specs
+        if: steps.detect.outputs.needs_java == 'true'
+        run: |
+          set -euo pipefail
+          LOG_DIR="${RUNNER_TEMP}/tlc-logs"
+          mkdir -p "${LOG_DIR}"
+          mapfile -t TLA_FILES < <(git ls-files '*.tla')
+          mapfile -t CFG_FILES < <(git ls-files '*.cfg')
+          for tla in "${TLA_FILES[@]}"; do
+            cfg="${tla%.tla}.cfg"
+            if [ ! -f "$cfg" ]; then
+              echo "Missing TLC config for ${tla}: expected ${cfg}" >&2
+              exit 1
+            fi
+          done
+          for cfg in "${CFG_FILES[@]}"; do
+            tla="${cfg%.cfg}.tla"
+            if [ ! -f "$tla" ]; then
+              echo "Missing TLA module for ${cfg}: expected ${tla}" >&2
+              exit 1
+            fi
+          done
+
+          TOOLS_DIR="${RUNNER_TEMP}/tla-tools"
+          JAR_PATH="${TOOLS_DIR}/tla2tools.jar"
+          TLA_VERSION="v1.8.0"
+          TLA_URL="https://github.com/tlaplus/tlaplus/releases/download/${TLA_VERSION}/tla2tools.jar"
+          mkdir -p "${TOOLS_DIR}"
+          if [ ! -f "${JAR_PATH}" ]; then
+            curl -fsSL "${TLA_URL}" -o "${JAR_PATH}"
+          fi
+
+          for cfg in "${CFG_FILES[@]}"; do
+            tla="${cfg%.cfg}.tla"
+            base_name=$(basename "${tla}" .tla)
+            echo "Running TLC for ${tla}"
+            java -XX:+UseSerialGC -cp "${JAR_PATH}" tlc2.TLC \
+              -cleanup \
+              -deadlock \
+              -config "${cfg}" \
+              "${tla}" | tee "${LOG_DIR}/${base_name}.log"
+          done
+
+      - name: Upload TLC logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: tlc-logs
+          path: ${{ runner.temp }}/tlc-logs
+
+      - name: Lean build
+        if: steps.detect.outputs.has_lean == 'true'
+        run: |
+          set -euo pipefail
+          mapfile -t LAKE_FILES < <(git ls-files '**/lakefile.lean' '**/lakefile.toml')
+          if [ ${#LAKE_FILES[@]} -eq 0 ]; then
+            echo "Lean files found, but no Lake workspace detected." >&2
+            exit 1
+          fi
+          mapfile -t LAKE_DIRS < <(printf "%s\n" "${LAKE_FILES[@]}" | xargs -n1 dirname | sort -u)
+          for dir in "${LAKE_DIRS[@]}"; do
+            echo "Running lake build in ${dir}"
+            (cd "${dir}" && lake build)
+          done
+
+  merge-blocker:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Branch protection not enabled
+        run: |
+          echo "Required status checks are not enforced without branch protection."
+          echo "Enable branch protection for main/development, then remove this blocker."
+          exit 1
